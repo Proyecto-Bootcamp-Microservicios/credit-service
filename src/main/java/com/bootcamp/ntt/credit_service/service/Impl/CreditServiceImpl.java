@@ -1,4 +1,4 @@
-package com.bootcamp.ntt.credit_service.Impl;
+package com.bootcamp.ntt.credit_service.service.Impl;
 
 import com.bootcamp.ntt.credit_service.client.CustomerClient;
 import com.bootcamp.ntt.credit_service.exception.BusinessRuleException;
