@@ -1,0 +1,237 @@
+openapi: 3.0.3
+info:
+  title: Credit Service API
+  version: 1.0.0
+  description: API for managing credits (personal and enterprise)
+
+servers:
+  - url: http://localhost:8080/api/v1
+
+paths:
+  /credits:
+    get:
+      summary: Get all credits
+      operationId: getAllCredits
+      parameters:
+        - name: isActive
+          in: query
+          required: false
+          schema:
+            type: boolean
+          example: true
+        - name: customerId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter credits by customer ID
+          example: "68a0cdde7d68c910da0bc239"
+      responses:
+        '200':
+          description: List of all credits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CreditResponse'
+    post:
+      summary: Create a new credit
+      operationId: createCredit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditRequest'
+      responses:
+        '201':
+          description: Credit created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditResponse'
+        '400':
+          description: Bad request - Validation errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                personalCreditExists:
+                  summary: Personal customer already has a credit
+                  value:
+                    code: "PERSON_ALREADY_HAS_CREDIT"
+                    message: "Personal customers can only have one active credit"
+                    timestamp: "2025-08-24T10:15:30Z"
+                customerNotFound:
+                  summary: Customer not found
+                  value:
+                    code: "CUSTOMER_NOT_FOUND"
+                    message: "Customer with provided ID does not exist"
+                    timestamp: "2025-08-24T10:15:30Z"
+
+  /credits/{id}:
+    get:
+      summary: Get a credit by ID
+      operationId: getCreditById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Credit found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditResponse'
+        '404':
+          description: Credit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Update a credit by ID
+      operationId: updateCredit
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditRequest'
+      responses:
+        '200':
+          description: Credit updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditResponse'
+        '404':
+          description: Credit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Bad request - Validation errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Delete a credit by ID
+      operationId: deleteCredit
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Credit deleted
+        '404':
+          description: Credit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    CreditRequest:
+      type: object
+      properties:
+        creditNumber:
+          type: string
+          example: "PER-0001"
+        customerId:
+          type: string
+          example: "68a0cdde7d68c910da0bc239"
+        creditLimit:
+          type: number
+          format: double
+          example: 10000.00
+        availableCredit:
+          type: number
+          format: double
+          example: 7000
+        isActive:
+          type: boolean
+          example: true
+      required:
+        - creditNumber
+        - customerId
+        - type
+        - creditLimit
+        - isActive
+
+    CreditResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "64f3cbb5f8a1e53d2f7c34e1"
+        creditNumber:
+          type: string
+          example: "PER-0001"
+        customerId:
+          type: string
+          example: "68a0cdde7d68c910da0bc239"
+        type:
+          type: string
+          enum: ["PERSONAL", "ENTERPRISE"]
+          example: "PERSONAL"
+        creditLimit:
+          type: number
+          format: double
+          example: 10000.00
+        availableCredit:
+          type: number
+          format: double
+          example: 7000
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: 2025-08-18T10:15:30Z
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2025-08-18T10:15:30Z
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "PERSON_ALREADY_HAS_CREDIT"
+        message:
+          type: string
+          example: "Personal customers can only have one active credit"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-08-24T10:15:30Z"
+      required:
+        - code
+        - message
+        - timestamp
