@@ -1,5 +1,8 @@
 package com.bootcamp.ntt.credit_service.exception;
 
+import lombok.Getter;
+
+@Getter
 public class BusinessRuleException extends RuntimeException{
   private final String code;
 
@@ -8,7 +11,4 @@ public class BusinessRuleException extends RuntimeException{
     this.code = code;
   }
 
-  public String getCode() {
-    return code;
-  }
 }

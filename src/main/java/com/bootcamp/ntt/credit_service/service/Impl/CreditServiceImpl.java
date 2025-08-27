@@ -1,10 +1,12 @@
 package com.bootcamp.ntt.credit_service.service.Impl;
 
 import com.bootcamp.ntt.credit_service.client.CustomerClient;
+import com.bootcamp.ntt.credit_service.entity.Credit;
 import com.bootcamp.ntt.credit_service.exception.BusinessRuleException;
 import com.bootcamp.ntt.credit_service.mapper.CreditMapper;
-import com.bootcamp.ntt.credit_service.model.CreditRequest;
+import com.bootcamp.ntt.credit_service.model.CreditCreateRequest;
 import com.bootcamp.ntt.credit_service.model.CreditResponse;
+import com.bootcamp.ntt.credit_service.model.CreditUpdateRequest;
 import com.bootcamp.ntt.credit_service.repository.CreditRepository;
 import com.bootcamp.ntt.credit_service.service.CreditService;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +30,7 @@ public class CreditServiceImpl implements CreditService {
   public Flux<CreditResponse> getAllCredits() {
     return creditRepository.findAll()
       .map(creditMapper::toResponse)
-      .doOnComplete(() -> log.debug("All credits retrieved"));
+      .doOnComplete(() -> log.debug("Credits retrieved"));
   }
 
   @Override
@@ -46,8 +48,8 @@ public class CreditServiceImpl implements CreditService {
   }
 
   @Override
-  public Mono<CreditResponse> createCredit(CreditRequest creditRequest) {
-    log.debug("Creating credit for customer: {}", creditRequest.getCustomerId());
+  public Mono<CreditResponse> createCredit(CreditCreateRequest creditRequest) {
+    /*log.debug("Creating credit for customer: {}", creditRequest.getCustomerId());
 
     return customerClient.getCustomerType(creditRequest.getCustomerId())
       .flatMap(customerType -> validateCreditCreation(creditRequest.getCustomerId(), customerType.getType())
@@ -56,11 +58,12 @@ public class CreditServiceImpl implements CreditService {
         .flatMap(creditRepository::save)
         .map(creditMapper::toResponse))
       .doOnSuccess(response -> log.debug("Credit created with ID: {}", response.getId()))
-      .doOnError(error -> log.error("Error creating credit: {}", error.getMessage()));
+      .doOnError(error -> log.error("Error creating credit: {}", error.getMessage()));*/
+    return null;
   }
 
   @Override
-  public Mono<CreditResponse> updateCredit(String id, CreditRequest creditRequest) {
+  public Mono<CreditResponse> updateCredit(String id, CreditUpdateRequest creditRequest) {
     log.debug("Updating credit with ID: {}", id);
 
     return creditRepository.findById(id)
@@ -81,12 +84,59 @@ public class CreditServiceImpl implements CreditService {
       .doOnError(error -> log.error("Error deleting credit {}: {}", id, error.getMessage()));
   }
 
-  @Override
+  /*Override
   public Flux<CreditResponse> getActiveCredits(Boolean isActive) {
     return creditRepository.findByIsActive(isActive)
       .map(creditMapper::toResponse)
       .doOnComplete(()->log.debug("Active credits retrieved : {}", isActive))
       .doOnError(error->log.error("Error getting active credits : {}",error.getMessage()));
+  }*/
+
+  @Override
+  public Flux<CreditResponse> getCreditsByActive(Boolean isActive) {
+    return creditRepository.findByIsActive(isActive)
+      .map(creditMapper::toResponse)
+      .doOnComplete(() -> log.debug("Active credits retrieved"));
+  }
+
+  /*@Override
+  public Flux<CreditResponse> getCreditsByCustomer(String customerId) {
+    return creditRepository.findByCustomerId(customerId)
+      .map(creditMapper::toResponse)
+      .doOnComplete(() -> log.debug("Customer credits retrieved"));
+  }*/
+
+  @Override
+  public Flux<CreditResponse> getCreditsByActiveAndCustomer(Boolean isActive, String customerId) {
+    return creditRepository.findByIsActiveAndCustomerId(isActive, customerId)
+      .map(creditMapper::toResponse)
+      .doOnComplete(() -> log.debug("Credits active by customer retrieved "));
+  }
+
+  @Override
+  public Mono<CreditResponse> deactivateCard(String id) {
+    return creditRepository.findById(id)
+      .switchIfEmpty(Mono.error(new RuntimeException("Credit not found with id: " + id)))
+      .flatMap(card -> {
+        card.setActive(false);  // soft delete
+        return creditRepository.save(card);
+      })
+      .map(creditMapper::toResponse)
+      .doOnSuccess(c -> log.debug("Credit  {} deactivated", id))
+      .doOnError(e -> log.error("Error deactivating credit card {}: {}", id, e.getMessage()));
+  }
+
+  @Override
+  public Mono<CreditResponse> activateCard(String id) {
+    return creditRepository.findById(id)
+      .switchIfEmpty(Mono.error(new RuntimeException("Credit not found with id: " + id)))
+      .flatMap(card -> {
+        card.setActive(true);  // reactivar
+        return creditRepository.save(card);
+      })
+      .map(creditMapper::toResponse)
+      .doOnSuccess(c -> log.debug("Credit {} activated", id))
+      .doOnError(e -> log.error("Error activating credit  {}: {}", id, e.getMessage()));
   }
 
   //Validaciones

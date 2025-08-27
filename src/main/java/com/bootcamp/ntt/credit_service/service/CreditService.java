@@ -1,25 +1,34 @@
 package com.bootcamp.ntt.credit_service.service;
 
-import com.bootcamp.ntt.credit_service.model.CreditRequest;
+import com.bootcamp.ntt.credit_service.model.CreditCreateRequest;
+import com.bootcamp.ntt.credit_service.model.CreditUpdateRequest;
 import com.bootcamp.ntt.credit_service.model.CreditResponse;
-import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-@Service
 public interface CreditService {
 
   Flux<CreditResponse> getAllCredits();
 
+  Flux<CreditResponse> getCreditsByActive(Boolean isActive);
+
+  //Flux<CreditResponse> getCreditsByCustomer(String customerId);
+
   Mono<CreditResponse> getCreditById(String id);
 
-  Mono<CreditResponse> createCredit(CreditRequest creditRequest);
+  Flux<CreditResponse> getCreditsByActiveAndCustomer(Boolean isActive, String customerId);
 
-  Mono<CreditResponse> updateCredit(String id, CreditRequest creditRequest);
+  Mono<CreditResponse> createCredit(CreditCreateRequest creditRequest);
+
+  Mono<CreditResponse> updateCredit(String id, CreditUpdateRequest creditRequest);
 
   Mono<Void> deleteCredit(String id);
 
-  Flux<CreditResponse> getActiveCredits(Boolean isActive);
+  Mono<CreditResponse> deactivateCard(String id);
+
+  Mono<CreditResponse> activateCard(String id);
+
+  //Flux<CreditResponse> getActiveCredits(Boolean isActive);
 
 
 }

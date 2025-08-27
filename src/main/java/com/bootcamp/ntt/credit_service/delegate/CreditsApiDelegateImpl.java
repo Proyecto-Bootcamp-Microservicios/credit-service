@@ -1,8 +1,9 @@
 package com.bootcamp.ntt.credit_service.delegate;
 
 import com.bootcamp.ntt.credit_service.api.CreditsApiDelegate;
-import com.bootcamp.ntt.credit_service.model.CreditRequest;
+import com.bootcamp.ntt.credit_service.model.CreditCreateRequest;
 import com.bootcamp.ntt.credit_service.model.CreditResponse;
+import com.bootcamp.ntt.credit_service.model.CreditUpdateRequest;
 import com.bootcamp.ntt.credit_service.service.CreditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,14 +26,14 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
    */
   @Override
   public Mono<ResponseEntity<CreditResponse>> createCredit(
-    Mono<CreditRequest> creditRequest,
+    Mono<CreditCreateRequest>creditRequest,
     ServerWebExchange exchange) {
 
     log.info("Creating new credit - Request received");
 
     return creditRequest
       .doOnNext(request -> log.info("Creating credit for customer: {}", request.getCustomerId()))
-      .flatMap(creditService::createCredit)  // ✅ Método corregido del service
+      .flatMap(creditService::createCredit)
       .map(response -> {
         log.info("Credit created successfully with ID: {}", response.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -45,19 +46,16 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
    * GET /credits : Get all credits
    */
   @Override
-  public Mono<ResponseEntity<Flux<CreditResponse>>> getAllCredits(Boolean isActive, String customerId, ServerWebExchange exchange) {
+  public Mono<ResponseEntity<Flux<CreditResponse>>> getAllCredits(String customerId, Boolean isActive, ServerWebExchange exchange) {
+
+    Boolean activeFilter = (isActive != null) ? isActive : true;
 
     Flux<CreditResponse> credits;
 
-    if (isActive == null) {
-      // 🔹 Si no pasan el query param, devuelves todos
-      credits = creditService.getAllCredits();
-    } else if (isActive) {
-      // 🔹 Si pasan ?isActive=true
-      credits = creditService.getActiveCredits(true);
+    if (customerId != null) {
+      credits = creditService.getCreditsByActiveAndCustomer(activeFilter, customerId);
     } else {
-      // 🔹 Si pasan ?isActive=false
-      credits = creditService.getActiveCredits(false);
+      credits = creditService.getCreditsByActive(activeFilter);
     }
 
     credits = credits
@@ -82,7 +80,7 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
     log.info("Getting credit by ID: {}", id);
 
     return creditService
-      .getCreditById(id)  // ✅ Método del service
+      .getCreditById(id)
       .map(response -> {
         log.info("Credit found: {}", response.getId());
         return ResponseEntity.ok(response);
@@ -98,7 +96,7 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
   /**
    * GET /credits/active?isActive=true : Get active credits
    */
-  @Override
+  /*@Override
   public Mono<ResponseEntity<Flux<CreditResponse>>> getActiveCredits(
     Boolean isActive,
     String customerId,
@@ -116,7 +114,7 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
         log.error("Exception in getActiveCredits: {}", error.getMessage(), error);
         return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Flux.empty()));
       });
-  }
+  }*/
 
   /**
    * PUT /credits/{id} : Update a credit by ID
@@ -124,7 +122,7 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
   @Override
   public Mono<ResponseEntity<CreditResponse>> updateCredit(
     String id,
-    Mono<CreditRequest> creditRequest,
+    Mono<CreditUpdateRequest> creditRequest,
     ServerWebExchange exchange) {
 
     log.info("Updating credit with ID: {}", id);
@@ -165,6 +163,46 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
         }
         return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());  // ✅ Y aquí
       });
+  }
+
+  @Override
+  public Mono<ResponseEntity<CreditResponse>> deactivateCredit(
+    String id,
+    ServerWebExchange exchange) {
+
+    log.info("Deactivating Credit with ID: {}", id);
+
+    return creditService.deactivateCard(id)
+      .map(response -> {
+        log.info("Credit deactivated successfully: {}", response.getId());
+        return ResponseEntity.ok(response);
+      })
+      .switchIfEmpty(Mono.fromCallable(() -> {
+        log.warn("Credit not found with ID: {}", id);
+        return ResponseEntity.notFound().build();
+      }))
+      .doOnError(error -> log.error("Error deactivating Credit {}: {}", id, error.getMessage()))
+      .onErrorResume(this::handleError);
+  }
+
+  @Override
+  public Mono<ResponseEntity<CreditResponse>> activateCredit(
+    String id,
+    ServerWebExchange exchange) {
+
+    log.info("Activating Credit with ID: {}", id);
+
+    return creditService.activateCard(id)
+      .map(response -> {
+        log.info("Credit activated successfully: {}", response.getId());
+        return ResponseEntity.ok(response);
+      })
+      .switchIfEmpty(Mono.fromCallable(() -> {
+        log.warn("Credit not found with ID: {}", id);
+        return ResponseEntity.notFound().build();
+      }))
+      .doOnError(error -> log.error("Error activating card {}: {}", id, error.getMessage()))
+      .onErrorResume(this::handleError);
   }
 
   /**

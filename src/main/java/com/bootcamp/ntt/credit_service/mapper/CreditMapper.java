@@ -2,8 +2,9 @@ package com.bootcamp.ntt.credit_service.mapper;
 
 import com.bootcamp.ntt.credit_service.entity.Credit;
 import com.bootcamp.ntt.credit_service.entity.CreditType;
-import com.bootcamp.ntt.credit_service.model.CreditRequest;
+import com.bootcamp.ntt.credit_service.model.CreditCreateRequest;
 import com.bootcamp.ntt.credit_service.model.CreditResponse;
+import com.bootcamp.ntt.credit_service.model.CreditUpdateRequest;
 import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -13,7 +14,7 @@ import java.time.ZoneOffset;
 @Component
 public class CreditMapper {
 
-  public Credit toEntity(CreditRequest dto,String customerType) {
+  public Credit toEntity(CreditCreateRequest dto, String customerType) {
     if (dto == null) {
       return null;
     }
@@ -26,23 +27,15 @@ public class CreditMapper {
     credit.setAvailableCredit(
       dto.getAvailableCredit() != null ? BigDecimal.valueOf(dto.getAvailableCredit()) : BigDecimal.ZERO
     );
-    credit.setActive(dto.getIsActive() != null ? dto.getIsActive() : true);
     return credit;
   }
 
 
-  public Credit updateEntity(Credit existing, CreditRequest dto) {
+  public Credit updateEntity(Credit existing, CreditUpdateRequest dto) {
     if (existing == null || dto == null) {
       return existing;
     }
 
-    if (dto.getCreditNumber() != null) {
-      existing.setCreditNumber(dto.getCreditNumber());
-    }
-
-    if (dto.getCustomerId() != null) {
-      existing.setCustomerId(dto.getCustomerId());
-    }
 
     if (dto.getCreditLimit() != null) {
       existing.setCreditLimit(BigDecimal.valueOf(dto.getCreditLimit()));

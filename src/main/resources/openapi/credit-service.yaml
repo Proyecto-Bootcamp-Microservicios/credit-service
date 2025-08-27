@@ -13,12 +13,6 @@ paths:
       summary: Get all credits
       operationId: getAllCredits
       parameters:
-        - name: isActive
-          in: query
-          required: false
-          schema:
-            type: boolean
-          example: true
         - name: customerId
           in: query
           required: false
@@ -26,9 +20,16 @@ paths:
             type: string
           description: Filter credits by customer ID
           example: "68a0cdde7d68c910da0bc239"
+        - name: isActive
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter credit by active status (default = true)
+          example: true
       responses:
         '200':
-          description: List of all credits
+          description: List of customers credits
           content:
             application/json:
               schema:
@@ -43,7 +44,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreditRequest'
+              $ref: '#/components/schemas/CreditCreateRequest'
       responses:
         '201':
           description: Credit created
@@ -114,7 +115,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreditRequest'
+              $ref: '#/components/schemas/CreditUpdateRequest'
       responses:
         '200':
           description: Credit updated
@@ -152,10 +153,59 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /credits/{id}/deactivate:
+    patch:
+      summary: Soft delete (deactivate) a credit by ID
+      description: Marks the credit as inactive without physically removing it
+      operationId: deactivateCredit
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Credit deactivated (isActive set to false)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditResponse'
+        '404':
+          description: Credit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /credits/{id}/activate:
+    patch:
+      summary: Reactivate a credit by ID
+      description: Marks the credit as active again
+      operationId: activateCredit
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Credit activated (isActive set to true)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditResponse'
+        '404':
+          description: Credit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   schemas:
-    CreditRequest:
+    CreditCreateRequest:
       type: object
       properties:
         creditNumber:
@@ -172,14 +222,28 @@ components:
           type: number
           format: double
           example: 7000
+      required:
+        - creditNumber
+        - customerId
+        - creditLimit
+
+    CreditUpdateRequest:
+      type: object
+      properties:
+        creditLimit:
+          type: number
+          format: double
+          example: 12000.00
+        availableCredit:
+          type: number
+          format: double
+          example: 8000
         isActive:
           type: boolean
           example: true
       required:
-        - creditNumber
-        - customerId
-        - type
         - creditLimit
+        - availableCredit
         - isActive
 
     CreditResponse:
