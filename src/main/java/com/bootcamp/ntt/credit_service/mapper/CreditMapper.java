@@ -14,13 +14,13 @@ import java.time.ZoneOffset;
 @Component
 public class CreditMapper {
 
-  public Credit toEntity(CreditCreateRequest dto, String customerType) {
+  public Credit toEntity(CreditCreateRequest dto, String customerType, String creditNumber) {
     if (dto == null) {
       return null;
     }
 
     Credit credit = new Credit();
-    credit.setCreditNumber(dto.getCreditNumber());
+    credit.setCreditNumber(creditNumber);
     credit.setCustomerId(dto.getCustomerId());
     credit.setType(CreditType.valueOf(customerType));
     credit.setCreditLimit(BigDecimal.valueOf(dto.getCreditLimit()));

@@ -28,6 +28,8 @@ public interface CreditService {
 
   Mono<CreditResponse> activateCard(String id);
 
+  Mono<String> generateUniqueCreditNumber();
+
   //Flux<CreditResponse> getActiveCredits(Boolean isActive);
 
 

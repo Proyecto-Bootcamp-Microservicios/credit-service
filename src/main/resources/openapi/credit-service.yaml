@@ -208,9 +208,6 @@ components:
     CreditCreateRequest:
       type: object
       properties:
-        creditNumber:
-          type: string
-          example: "PER-0001"
         customerId:
           type: string
           example: "68a0cdde7d68c910da0bc239"
@@ -223,7 +220,6 @@ components:
           format: double
           example: 7000
       required:
-        - creditNumber
         - customerId
         - creditLimit
 
@@ -244,7 +240,6 @@ components:
       required:
         - creditLimit
         - availableCredit
-        - isActive
 
     CreditResponse:
       type: object

@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.security.SecureRandom;
+
 
 @Slf4j
 @Service
@@ -24,6 +26,7 @@ public class CreditServiceImpl implements CreditService {
   private final CreditRepository creditRepository;
   private final CreditMapper creditMapper;
   private final CustomerClient customerClient;
+  private static final SecureRandom random = new SecureRandom();
 
 
   @Override
@@ -49,17 +52,17 @@ public class CreditServiceImpl implements CreditService {
 
   @Override
   public Mono<CreditResponse> createCredit(CreditCreateRequest creditRequest) {
-    /*log.debug("Creating credit for customer: {}", creditRequest.getCustomerId());
+    log.debug("Creating credit for customer: {}", creditRequest.getCustomerId());
 
     return customerClient.getCustomerType(creditRequest.getCustomerId())
-      .flatMap(customerType -> validateCreditCreation(creditRequest.getCustomerId(), customerType.getType())
-        .then(Mono.just(creditRequest))
-        .map(request -> creditMapper.toEntity(request, customerType.getType())) // Pasamos el tipo
+      .flatMap(customerType -> validateCreditCreation(creditRequest.getCustomerId(), customerType.getCustomerType())
+        //.then(Mono.just(creditRequest))
+        .then(generateUniqueCreditNumber())
+        .map(creditNumber -> creditMapper.toEntity(creditRequest, customerType.getCustomerType(),creditNumber)) // Pasamos el tipo
         .flatMap(creditRepository::save)
         .map(creditMapper::toResponse))
       .doOnSuccess(response -> log.debug("Credit created with ID: {}", response.getId()))
-      .doOnError(error -> log.error("Error creating credit: {}", error.getMessage()));*/
-    return null;
+      .doOnError(error -> log.error("Error creating credit: {}", error.getMessage()));
   }
 
   @Override
@@ -137,6 +140,23 @@ public class CreditServiceImpl implements CreditService {
       .map(creditMapper::toResponse)
       .doOnSuccess(c -> log.debug("Credit {} activated", id))
       .doOnError(e -> log.error("Error activating credit  {}: {}", id, e.getMessage()));
+  }
+
+  @Override
+  public Mono<String> generateUniqueCreditNumber() {
+    String candidate = generateRandomCreditNumber();
+
+    return creditRepository.findByCreditNumber(candidate)
+      .flatMap(existing -> generateUniqueCreditNumber()) // si existe, intenta de nuevo
+      .switchIfEmpty(Mono.just(candidate)); // si no existe, úsalo
+  }
+
+  private String generateRandomCreditNumber() {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < 16; i++) {
+      sb.append(random.nextInt(10));
+    }
+    return sb.toString();
   }
 
   //Validaciones

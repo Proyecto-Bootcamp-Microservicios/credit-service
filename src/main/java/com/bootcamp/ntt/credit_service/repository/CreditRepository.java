@@ -10,6 +10,7 @@ import reactor.core.publisher.Mono;
 public interface CreditRepository extends ReactiveMongoRepository<Credit,String> {
   Flux<Credit> findByIsActive(Boolean isActive);
   Mono<Long> countByCustomerIdAndIsActiveTrue(String customerId);
+  Mono<Credit> findByCreditNumber(String creditNumber);
   Flux<Credit> findByCustomerId(String customerId);
   Flux<Credit> findByIsActiveAndCustomerId(Boolean isActive, String customerId);
 }

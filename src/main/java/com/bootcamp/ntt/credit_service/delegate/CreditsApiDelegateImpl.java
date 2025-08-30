@@ -26,7 +26,7 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
    */
   @Override
   public Mono<ResponseEntity<CreditResponse>> createCredit(
-    Mono<CreditCreateRequest>creditRequest,
+    Mono<CreditCreateRequest> creditRequest,
     ServerWebExchange exchange) {
 
     log.info("Creating new credit - Request received");
@@ -37,36 +37,40 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
       .map(response -> {
         log.info("Credit created successfully with ID: {}", response.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
-      })
-      .doOnError(error -> log.error("Error creating credit: {}", error.getMessage(), error))
-      .onErrorResume(this::handleError);
+      });
+    // El GlobalExceptionHandler maneja automáticamente:
+    // - BusinessRuleException → HTTP 409
+    // - CustomerNotFoundException → HTTP 404
+    // - CustomerServiceException → HTTP 503
   }
 
   /**
    * GET /credits : Get all credits
    */
   @Override
-  public Mono<ResponseEntity<Flux<CreditResponse>>> getAllCredits(String customerId, Boolean isActive, ServerWebExchange exchange) {
+  public Mono<ResponseEntity<Flux<CreditResponse>>> getAllCredits(
+    String customerId,
+    Boolean isActive,
+    ServerWebExchange exchange) {
+
+    log.info("Getting credits - customerId: {}, isActive: {}", customerId, isActive);
 
     Boolean activeFilter = (isActive != null) ? isActive : true;
 
     Flux<CreditResponse> credits;
 
     if (customerId != null) {
+      log.info("Filtering by customer ID: {} and active: {}", customerId, activeFilter);
       credits = creditService.getCreditsByActiveAndCustomer(activeFilter, customerId);
     } else {
+      log.info("Getting all credits with active filter: {}", activeFilter);
       credits = creditService.getCreditsByActive(activeFilter);
     }
 
-    credits = credits
-      .doOnComplete(() -> log.info("Credits retrieved successfully"))
-      .doOnError(error -> log.error("Error getting credits: {}", error.getMessage(), error));
+    credits = credits.doOnComplete(() -> log.info("Credits retrieved successfully"));
 
-    return Mono.just(ResponseEntity.ok(credits))
-      .onErrorResume(error -> {
-        log.error("Exception in getAllCredits: {}", error.getMessage(), error);
-        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Flux.empty()));
-      });
+    return Mono.just(ResponseEntity.ok(credits));
+    // No necesita manejo de errores, el GlobalExceptionHandler se encarga
   }
 
   /**
@@ -88,33 +92,10 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
       .switchIfEmpty(Mono.fromCallable(() -> {
         log.warn("Credit not found with ID: {}", id);
         return ResponseEntity.notFound().build();
-      }))
-      .doOnError(error -> log.error("Error getting credit by ID {}: {}", id, error.getMessage(), error))
-      .onErrorResume(this::handleError);
+      }));
+    // Solo manejamos el caso de "no encontrado" aquí,
+    // otras excepciones las maneja el GlobalExceptionHandler
   }
-
-  /**
-   * GET /credits/active?isActive=true : Get active credits
-   */
-  /*@Override
-  public Mono<ResponseEntity<Flux<CreditResponse>>> getActiveCredits(
-    Boolean isActive,
-    String customerId,
-    ServerWebExchange exchange) {
-
-    log.info("Getting credits with isActive: {}", isActive);
-
-    Flux<CreditResponse> credits = creditService
-      .getActiveCredits(isActive)  // ✅ Método del service
-      .doOnComplete(() -> log.info("Active credits retrieved successfully"))
-      .doOnError(error -> log.error("Error getting active credits: {}", error.getMessage(), error));
-
-    return Mono.just(ResponseEntity.ok(credits))
-      .onErrorResume(error -> {
-        log.error("Exception in getActiveCredits: {}", error.getMessage(), error);
-        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Flux.empty()));
-      });
-  }*/
 
   /**
    * PUT /credits/{id} : Update a credit by ID
@@ -129,17 +110,12 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
 
     return creditRequest
       .doOnNext(request -> log.info("Update request for credit ID: {}", id))
-      .flatMap(request -> creditService.updateCredit(id, request))  // ✅ Método del service
+      .flatMap(request -> creditService.updateCredit(id, request))
       .map(response -> {
         log.info("Credit updated successfully: {}", response.getId());
         return ResponseEntity.ok(response);
-      })
-      .switchIfEmpty(Mono.fromCallable(() -> {
-        log.warn("Credit not found for update with ID: {}", id);
-        return ResponseEntity.notFound().build();
-      }))
-      .doOnError(error -> log.error("Error updating credit {}: {}", id, error.getMessage(), error))
-      .onErrorResume(this::handleError);
+      });
+    // El GlobalExceptionHandler maneja "Credit not found" como HTTP 404
   }
 
   /**
@@ -153,93 +129,61 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
     log.info("Deleting credit with ID: {}", id);
 
     return creditService
-      .deleteCredit(id)  // Retorna Mono<Void>
-      .then(Mono.just(ResponseEntity.noContent().<Void>build()))  // ✅ Tipo explícito aquí
-      .doOnSuccess(response -> log.info("Credit deleted successfully: {}", id))
-      .onErrorResume(error -> {
-        log.error("Error deleting credit {}: {}", id, error.getMessage(), error);
-        if (isNotFoundError(error)) {
-          return Mono.just(ResponseEntity.notFound().build());  // ✅ Y aquí
-        }
-        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());  // ✅ Y aquí
-      });
+      .deleteCredit(id)
+      .then(Mono.fromCallable(() -> {
+        log.info("Credit deleted successfully: {}", id);
+        return ResponseEntity.noContent().build();
+      }));
+    // El GlobalExceptionHandler maneja "Credit not found" como HTTP 404
   }
 
+  /**
+   * PUT /credits/{id}/deactivate : Deactivate a credit
+   */
   @Override
   public Mono<ResponseEntity<CreditResponse>> deactivateCredit(
     String id,
     ServerWebExchange exchange) {
 
-    log.info("Deactivating Credit with ID: {}", id);
+    log.info("Deactivating credit with ID: {}", id);
 
-    return creditService.deactivateCard(id)
+    return creditService
+      .deactivateCard(id)
       .map(response -> {
         log.info("Credit deactivated successfully: {}", response.getId());
         return ResponseEntity.ok(response);
-      })
-      .switchIfEmpty(Mono.fromCallable(() -> {
-        log.warn("Credit not found with ID: {}", id);
-        return ResponseEntity.notFound().build();
-      }))
-      .doOnError(error -> log.error("Error deactivating Credit {}: {}", id, error.getMessage()))
-      .onErrorResume(this::handleError);
+      });
+    // El GlobalExceptionHandler maneja "Credit not found" como HTTP 404
   }
 
+  /**
+   * PUT /credits/{id}/activate : Activate a credit
+   */
   @Override
   public Mono<ResponseEntity<CreditResponse>> activateCredit(
     String id,
     ServerWebExchange exchange) {
 
-    log.info("Activating Credit with ID: {}", id);
+    log.info("Activating credit with ID: {}", id);
 
-    return creditService.activateCard(id)
+    return creditService
+      .activateCard(id)
       .map(response -> {
         log.info("Credit activated successfully: {}", response.getId());
         return ResponseEntity.ok(response);
-      })
-      .switchIfEmpty(Mono.fromCallable(() -> {
-        log.warn("Credit not found with ID: {}", id);
-        return ResponseEntity.notFound().build();
-      }))
-      .doOnError(error -> log.error("Error activating card {}: {}", id, error.getMessage()))
-      .onErrorResume(this::handleError);
+      });
+    // El GlobalExceptionHandler maneja "Credit not found" como HTTP 404
   }
 
   /**
-   * Manejo centralizado de errores para operaciones que retornan CreditResponse
+   * Manejo de errores para el método createCredit (mantiene compatibilidad)
+   * Este método solo se usa en createCredit por si hay algún error no manejado específicamente
    */
   private Mono<ResponseEntity<CreditResponse>> handleError(Throwable error) {
-    log.error("Handling error: {}", error.getMessage(), error);
+    log.error("Handling error in delegate: {}", error.getMessage(), error);
 
-    if (isNotFoundError(error)) {
-      return Mono.just(ResponseEntity.notFound().build());
-    }
-
-    if (isValidationError(error)) {
-      return Mono.just(ResponseEntity.badRequest().build());
-    }
-
+    // El GlobalExceptionHandler debería manejar la mayoría de casos,
+    // esto es solo un fallback para casos no previstos
     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
   }
-
-  /**
-   * Verifica si el error es de tipo "not found"
-   */
-  private boolean isNotFoundError(Throwable error) {
-    return error.getMessage() != null &&
-      (error.getMessage().contains("not found") ||
-        error.getMessage().contains("Not Found") ||
-        error instanceof RuntimeException && error.getMessage().contains("404"));
-  }
-
-  /**
-   * Verifica si el error es de validación
-   */
-  private boolean isValidationError(Throwable error) {
-    return error.getMessage() != null &&
-      (error.getMessage().contains("validation") ||
-        error.getMessage().contains("invalid") ||
-        error instanceof IllegalArgumentException);
-  }
-
 }
