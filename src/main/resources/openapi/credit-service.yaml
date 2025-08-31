@@ -202,7 +202,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /credits/{creditNumber}/process-payment:
+    post:
+      summary: Process payment validation and update balances
+      description: Validates payment and updates credit balances if successful
+      operationId: processCreditPayment
+      parameters:
+        - name: creditNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentProcessRequest'
+      responses:
+        '200':
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentProcessResponse'
+        '400':
+          description: Payment validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentProcessResponse'
+        '404':
+          description: Credit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
+  /credits/{creditNumber}/balance:
+    get:
+      summary: Get credit balance information
+      operationId: getCreditBalance
+      parameters:
+        - name: creditNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Credit balance information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditBalanceResponse'
+        '404':
+          description: Credit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
     CreditCreateRequest:
@@ -241,6 +300,69 @@ components:
         - creditLimit
         - availableCredit
 
+    PaymentProcessRequest:
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Payment amount
+          example: 500.00
+
+    PaymentProcessResponse:
+      type: object
+      required:
+        - success
+        - creditId
+        - requestedAmount
+        - processedAt
+      properties:
+        success:
+          type: boolean
+          description: Whether the payment was successful
+          example: true
+        creditId:
+          type: string
+          description: Credit ID
+          example: "64f3cbb5f8a1e53d2f7c34e1"
+        requestedAmount:
+          type: number
+          format: double
+          description: Requested payment amount
+          example: 500.00
+        actualPaymentAmount:
+          type: number
+          format: double
+          description: Actual amount paid (only if success = true)
+          example: 500.00
+        availableCreditAfter:
+          type: number
+          format: double
+          description: Available credit after payment (only if success = true)
+          example: 9500.00
+        #currentBalanceAfter:
+          #type: number
+          #format: double
+          #description: Current balance after payment (only if success = true)
+          #example: 500.00
+        errorCode:
+          type: string
+          enum: [ CREDIT_INACTIVE, INVALID_AMOUNT, OVERPAYMENT_NOT_ALLOWED, ZERO_CURRENT_BALANCE ]
+          description: Error code (only if success = false)
+          example: "OVERPAYMENT_NOT_ALLOWED"
+        errorMessage:
+          type: string
+          description: Error message (only if success = false)
+          example: "Payment amount exceeds current balance"
+        processedAt:
+          type: string
+          format: date-time
+          description: Processing timestamp
+          example: "2025-08-30T15:30:00Z"
+
     CreditResponse:
       type: object
       properties:
@@ -276,6 +398,49 @@ components:
           type: string
           format: date-time
           example: 2025-08-18T10:15:30Z
+
+    CreditBalanceResponse:
+      type: object
+      required:
+        - creditId
+        - creditNumber
+        - creditLimit
+        - availableCredit
+        #- currentBalance
+        - utilizationPercentage
+      properties:
+        creditId:
+          type: string
+          description: Credit ID
+          example: "64f3cbb5f8a1e53d2f7c34e1"
+        creditNumber:
+          type: string
+          description: Credit number
+          example: "1234567891234567"
+        creditLimit:
+          type: number
+          format: double
+          description: Total credit limit
+          example: 10000.00
+        availableCredit:
+          type: number
+          format: double
+          description: Available credit
+          example: 6000.00
+        #currentBalance:
+          #type: number
+          #format: double
+          #description: Current balance (debt)
+          #example: 4000.00
+        utilizationPercentage:
+          type: number
+          format: double
+          description: Credit utilization percentage
+          example: 40.00
+        isActive:
+          type: boolean
+          description: Credit active status
+          example: true
 
     ErrorResponse:
       type: object

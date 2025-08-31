@@ -1,8 +1,6 @@
 package com.bootcamp.ntt.credit_service.service;
 
-import com.bootcamp.ntt.credit_service.model.CreditCreateRequest;
-import com.bootcamp.ntt.credit_service.model.CreditUpdateRequest;
-import com.bootcamp.ntt.credit_service.model.CreditResponse;
+import com.bootcamp.ntt.credit_service.model.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -24,11 +22,15 @@ public interface CreditService {
 
   Mono<Void> deleteCredit(String id);
 
-  Mono<CreditResponse> deactivateCard(String id);
+  Mono<CreditResponse> deactivateCredit(String id);
 
-  Mono<CreditResponse> activateCard(String id);
+  Mono<CreditResponse> activateCredit(String id);
 
   Mono<String> generateUniqueCreditNumber();
+
+  Mono<PaymentProcessResponse> processPayment(String creditNumber, PaymentProcessRequest paymentRequest);
+
+  Mono<CreditBalanceResponse> getCreditBalance(String cardNumber);
 
   //Flux<CreditResponse> getActiveCredits(Boolean isActive);
 

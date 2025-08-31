@@ -18,7 +18,7 @@ public class CustomerClient {
 
   private final WebClient webClient;
 
-  //@Value("${services.customer.base-url}")
+  @Value("${services.customer.base-url}")
   private String customerServiceUrl;
 
   public Mono<CustomerTypeResponse> getCustomerType(String customerId) {

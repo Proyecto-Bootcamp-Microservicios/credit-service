@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.server.ServerWebInputException;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -95,7 +96,6 @@ public class GlobalExceptionHandler {
   public Mono<ResponseEntity<ErrorResponse>> handleRuntimeException(RuntimeException ex) {
     log.error("Runtime exception: {}", ex.getMessage(), ex);
 
-    // Para casos como "Credit not found" que lanzas como RuntimeException
     if (ex.getMessage() != null && ex.getMessage().contains("not found")) {
         ErrorResponse errorResponse = new ErrorResponse();
         errorResponse.setCode("RESOURCE_NOT_FOUND");
@@ -122,5 +122,17 @@ public class GlobalExceptionHandler {
     errorResponse.setTimestamp(OffsetDateTime.now());
 
     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse));
+  }
+
+  @ExceptionHandler(ServerWebInputException.class)
+  public Mono<ResponseEntity<ErrorResponse>> handleServerWebInputException(ServerWebInputException ex) {
+    log.warn("Invalid request payload: {}", ex.getMessage());
+
+    ErrorResponse errorResponse = new ErrorResponse();
+    errorResponse.setCode("INVALID_AMOUNT_FORMAT");
+    errorResponse.setMessage("The amount must be a valid number");
+    errorResponse.setTimestamp(OffsetDateTime.now());
+
+    return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse));
   }
 }

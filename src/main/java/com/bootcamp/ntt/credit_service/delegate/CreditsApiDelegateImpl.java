@@ -1,9 +1,8 @@
 package com.bootcamp.ntt.credit_service.delegate;
 
 import com.bootcamp.ntt.credit_service.api.CreditsApiDelegate;
-import com.bootcamp.ntt.credit_service.model.CreditCreateRequest;
-import com.bootcamp.ntt.credit_service.model.CreditResponse;
-import com.bootcamp.ntt.credit_service.model.CreditUpdateRequest;
+import com.bootcamp.ntt.credit_service.model.*;
+
 import com.bootcamp.ntt.credit_service.service.CreditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,10 +37,6 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
         log.info("Credit created successfully with ID: {}", response.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
       });
-    // El GlobalExceptionHandler maneja automáticamente:
-    // - BusinessRuleException → HTTP 409
-    // - CustomerNotFoundException → HTTP 404
-    // - CustomerServiceException → HTTP 503
   }
 
   /**
@@ -70,7 +65,6 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
     credits = credits.doOnComplete(() -> log.info("Credits retrieved successfully"));
 
     return Mono.just(ResponseEntity.ok(credits));
-    // No necesita manejo de errores, el GlobalExceptionHandler se encarga
   }
 
   /**
@@ -93,8 +87,6 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
         log.warn("Credit not found with ID: {}", id);
         return ResponseEntity.notFound().build();
       }));
-    // Solo manejamos el caso de "no encontrado" aquí,
-    // otras excepciones las maneja el GlobalExceptionHandler
   }
 
   /**
@@ -115,7 +107,6 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
         log.info("Credit updated successfully: {}", response.getId());
         return ResponseEntity.ok(response);
       });
-    // El GlobalExceptionHandler maneja "Credit not found" como HTTP 404
   }
 
   /**
@@ -134,7 +125,6 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
         log.info("Credit deleted successfully: {}", id);
         return ResponseEntity.noContent().build();
       }));
-    // El GlobalExceptionHandler maneja "Credit not found" como HTTP 404
   }
 
   /**
@@ -148,12 +138,11 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
     log.info("Deactivating credit with ID: {}", id);
 
     return creditService
-      .deactivateCard(id)
+      .deactivateCredit(id)
       .map(response -> {
         log.info("Credit deactivated successfully: {}", response.getId());
         return ResponseEntity.ok(response);
       });
-    // El GlobalExceptionHandler maneja "Credit not found" como HTTP 404
   }
 
   /**
@@ -167,23 +156,52 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
     log.info("Activating credit with ID: {}", id);
 
     return creditService
-      .activateCard(id)
+      .activateCredit(id)
       .map(response -> {
         log.info("Credit activated successfully: {}", response.getId());
         return ResponseEntity.ok(response);
       });
-    // El GlobalExceptionHandler maneja "Credit not found" como HTTP 404
   }
 
   /**
-   * Manejo de errores para el método createCredit (mantiene compatibilidad)
-   * Este método solo se usa en createCredit por si hay algún error no manejado específicamente
-   */
-  private Mono<ResponseEntity<CreditResponse>> handleError(Throwable error) {
-    log.error("Handling error in delegate: {}", error.getMessage(), error);
 
-    // El GlobalExceptionHandler debería manejar la mayoría de casos,
-    // esto es solo un fallback para casos no previstos
-    return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
+   POST /credits/{creditNumber}/process-payment : Process credit payment
+   */
+  @Override
+  public Mono<ResponseEntity<PaymentProcessResponse>> processCreditPayment(
+    String creditNumber,
+    Mono<PaymentProcessRequest> paymentProcessRequest,
+    ServerWebExchange exchange) {
+    log.info("Processing payment for credit: {}", creditNumber);
+    return paymentProcessRequest
+      .doOnNext(request -> log.info("Payment request for credit {}: amount {}", creditNumber, request.getAmount()))
+      .flatMap(request -> creditService.processPayment(creditNumber, request))
+      .map(response -> {
+        if (response.getSuccess()) {
+          log.info("Payment processed successfully for credit {}: paid {}",
+            creditNumber, response.getActualPaymentAmount());
+        } else {
+          log.warn("Payment failed for credit {}: {}", creditNumber, response.getErrorMessage());
+        }
+        return ResponseEntity.ok(response);
+      });
   }
+
+  /**
+
+   GET /credits/{id}/balance : Get credit balance
+   */
+  @Override
+  public Mono<ResponseEntity<CreditBalanceResponse>> getCreditBalance(
+    String creditNumber,
+    ServerWebExchange exchange) {
+    log.info("Getting balance for credit: {}", creditNumber);
+    return creditService.getCreditBalance(creditNumber)
+      .map(response -> {
+        log.info("Balance retrieved for credit {}: available {}, current {}",
+          creditNumber, response.getAvailableCredit(), response.getCurrentBalance());
+        return ResponseEntity.ok(response);
+      });
+  }
+
 }
