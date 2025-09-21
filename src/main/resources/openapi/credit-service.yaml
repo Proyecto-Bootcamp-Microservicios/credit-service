@@ -202,6 +202,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
   /credits/{creditNumber}/process-payment:
     post:
       summary: Process payment validation and update balances
@@ -262,6 +263,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /credits/eligibility/{customerId}:
+    get:
+      summary: Check customer eligibility for new credit products
+      description: Validates if customer can acquire new credit products based on overdue status
+      operationId: checkCustomerEligibility
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "68a0cdde7d68c910da0bc239"
+      responses:
+        '200':
+          description: Customer eligibility status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductEligibilityResponse'
+        '404':
+          description: Customer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
     CreditCreateRequest:
@@ -270,35 +296,26 @@ components:
         customerId:
           type: string
           example: "68a0cdde7d68c910da0bc239"
-        creditLimit:
+        originalAmount:
           type: number
           format: double
-          example: 10000.00
-        availableCredit:
-          type: number
-          format: double
-          example: 7000
+          minimum: 5000
+          maximum: 100000
+          description: "Loan amount (minimum $5000, 12 monthly installments)"
+          example: 15000.00
       required:
-        - customerId
-        - creditLimit
+        - originalAmount
 
     CreditUpdateRequest:
       type: object
       properties:
-        creditLimit:
-          type: number
-          format: double
-          example: 12000.00
-        availableCredit:
-          type: number
-          format: double
-          example: 8000
+        nextPaymentDueDate:
+          type: string
+          format: date
+          example: "2025-10-15"
         isActive:
           type: boolean
           example: true
-      required:
-        - creditLimit
-        - availableCredit
 
     PaymentProcessRequest:
       type: object
@@ -309,7 +326,7 @@ components:
           type: number
           format: double
           minimum: 0.01
-          description: Payment amount
+          description: Payment amount (should match monthly payment)
           example: 500.00
 
     PaymentProcessResponse:
@@ -332,31 +349,39 @@ components:
           type: number
           format: double
           description: Requested payment amount
-          example: 500.00
+          example: 1250.00
         actualPaymentAmount:
           type: number
           format: double
           description: Actual amount paid (only if success = true)
-          example: 500.00
-        availableCreditAfter:
+          example: 1250.00
+        remainingBalance:
           type: number
           format: double
-          description: Available credit after payment (only if success = true)
-          example: 9500.00
-        #currentBalanceAfter:
-          #type: number
-          #format: double
-          #description: Current balance after payment (only if success = true)
-          #example: 500.00
+          description: Remaining balance after payment (only if success = true)
+          example: 13750.00
+        paidInstallments:
+          type: integer
+          description: Number of installments paid so far
+          example: 1
+        remainingInstallments:
+          type: integer
+          description: Remaining installments
+          example: 11
+        nextPaymentDueDate:
+          type: string
+          format: date
+          description: Next payment due date
+          example: "2025-11-15"
         errorCode:
           type: string
-          enum: [ CREDIT_INACTIVE, INVALID_AMOUNT, OVERPAYMENT_NOT_ALLOWED, ZERO_CURRENT_BALANCE ]
+          enum: [ CREDIT_INACTIVE, INVALID_AMOUNT, INSUFFICIENT_PAYMENT, CREDIT_ALREADY_PAID, OVERDUE_PAYMENT ]
           description: Error code (only if success = false)
-          example: "OVERPAYMENT_NOT_ALLOWED"
+          example: "INSUFFICIENT_PAYMENT"
         errorMessage:
           type: string
           description: Error message (only if success = false)
-          example: "Payment amount exceeds current balance"
+          example: "Payment amount is less than monthly installment"
         processedAt:
           type: string
           format: date-time
@@ -371,43 +396,86 @@ components:
           example: "64f3cbb5f8a1e53d2f7c34e1"
         creditNumber:
           type: string
-          example: "PER-0001"
+          example: "CR-0001"
         customerId:
           type: string
           example: "68a0cdde7d68c910da0bc239"
         type:
           type: string
-          enum: ["PERSONAL", "ENTERPRISE"]
+          enum: [ "PERSONAL", "ENTERPRISE" ]
           example: "PERSONAL"
-        creditLimit:
+        originalAmount:
           type: number
           format: double
-          example: 10000.00
-        availableCredit:
+          description: Original loan amount
+          example: 15000.00
+        currentBalance:
           type: number
           format: double
-          example: 7000
+          description: Remaining debt
+          example: 13750.00
+        monthlyPayment:
+          type: number
+          format: double
+          description: Fixed monthly installment
+          example: 1250.00
+        totalInstallments:
+          type: integer
+          description: Total number of installments (always 12)
+          example: 12
+        paidInstallments:
+          type: integer
+          description: Number of installments already paid
+          example: 1
+        remainingInstallments:
+          type: integer
+          description: Remaining installments to pay
+          example: 11
+        nextPaymentDueDate:
+          type: string
+          format: date
+          description: Next payment due date
+          example: "2025-11-15"
+        finalDueDate:
+          type: string
+          format: date
+          description: Final payment due date
+          example: "2026-10-15"
+        isOverdue:
+          type: boolean
+          description: Whether the credit is overdue
+          example: false
+        overdueDays:
+          type: integer
+          description: Number of days overdue (0 if not overdue)
+          example: 0
+        status:
+          type: string
+          enum: [ "ACTIVE", "PAID", "OVERDUE", "CANCELLED" ]
+          example: "ACTIVE"
         isActive:
           type: boolean
           example: true
         createdAt:
           type: string
           format: date-time
-          example: 2025-08-18T10:15:30Z
+          example: "2025-08-18T10:15:30Z"
         updatedAt:
           type: string
           format: date-time
-          example: 2025-08-18T10:15:30Z
+          example: "2025-08-18T10:15:30Z"
 
     CreditBalanceResponse:
       type: object
       required:
         - creditId
         - creditNumber
-        - creditLimit
-        - availableCredit
-        #- currentBalance
-        - utilizationPercentage
+        - originalAmount
+        - currentBalance
+        - monthlyPayment
+        - nextPaymentDueDate
+        - paidInstallments
+        - remainingInstallments
       properties:
         creditId:
           type: string
@@ -416,32 +484,115 @@ components:
         creditNumber:
           type: string
           description: Credit number
-          example: "1234567891234567"
-        creditLimit:
+          example: "PER-0001"
+        originalAmount:
           type: number
           format: double
-          description: Total credit limit
-          example: 10000.00
-        availableCredit:
+          description: Original loan amount
+          example: 15000.00
+        currentBalance:
           type: number
           format: double
-          description: Available credit
-          example: 6000.00
-        #currentBalance:
-          #type: number
-          #format: double
-          #description: Current balance (debt)
-          #example: 4000.00
-        utilizationPercentage:
+          description: Remaining balance to pay
+          example: 13750.00
+        monthlyPayment:
           type: number
           format: double
-          description: Credit utilization percentage
-          example: 40.00
+          description: Monthly installment amount
+          example: 1250.00
+        nextPaymentDueDate:
+          type: string
+          format: date
+          description: Next payment due date
+          example: "2025-11-15"
+        paidInstallments:
+          type: integer
+          description: Installments already paid
+          example: 1
+        remainingInstallments:
+          type: integer
+          description: Installments remaining
+          example: 11
+        paymentProgress:
+          type: number
+          format: double
+          description: Payment progress percentage
+          example: 8.33
+        isOverdue:
+          type: boolean
+          description: Credit overdue status
+          example: false
+        overdueDays:
+          type: integer
+          description: Days overdue
+          example: 0
+        status:
+          type: string
+          enum: [ "ACTIVE", "PAID", "OVERDUE", "CANCELLED" ]
+          example: "ACTIVE"
         isActive:
           type: boolean
           description: Credit active status
           example: true
+    ProductEligibilityResponse:
+      type: object
+      required:
+        - customerId
+        - isEligible
+        - checkedAt
+      properties:
+        customerId:
+          type: string
+          description: Customer ID
+          example: "68a0cdde7d68c910da0bc239"
+        isEligible:
+          type: boolean
+          description: Whether customer is eligible for new products
+          example: true
+        reason:
+          type: string
+          description: Reason if not eligible
+          example: "Customer has overdue debt in credit products"
+        overdueProducts:
+          type: array
+          description: List of overdue products (if any)
+          items:
+            $ref: '#/components/schemas/OverdueProduct'
+        checkedAt:
+          type: string
+          format: date-time
+          description: Timestamp when eligibility was checked
+          example: "2025-09-20T10:30:00Z"
 
+    OverdueProduct:
+        type: object
+        required:
+          - productId
+          - productType
+          - overdueDays
+        properties:
+          productId:
+            type: string
+            description: Product ID
+            example: "64f3cbb5f8a1e53d2f7c34e1"
+          productNumber:
+            type: string
+            description: Product number
+            example: "PER-0001"
+          productType:
+            type: string
+            enum: [ "CREDIT", "CREDIT_CARD" ]
+            description: Type of overdue product
+            example: "CREDIT"
+          overdueDays:
+            type: integer
+            description: Number of days overdue
+            example: 15
+          overdueAmount:
+            type: number
+            format: double
+            description: Amount overdue
+            example: 1250.00
     ErrorResponse:
       type: object
       properties:

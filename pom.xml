@@ -27,9 +27,15 @@
 		<url/>
 	</scm>
 	<properties>
-		<java.version>11</java.version>
+    <java.version>11</java.version>
     <spring-cloud.version>2021.0.9</spring-cloud.version>
+    <resilience4j.version>1.7.0</resilience4j.version>
     <openapi-generator.version>6.6.0</openapi-generator.version>
+    <checkstyle.version>8.45.1</checkstyle.version>
+    <maven-checkstyle-plugin.version>3.1.2</maven-checkstyle-plugin.version>
+    <checkstyle.config.location>checkstyle.xml</checkstyle.config.location>
+    <checkstyle.suppressions.location>checkstyle-suppressions.xml</checkstyle.suppressions.location>
+    <checkstyle.fail.on.violation>true</checkstyle.fail.on.violation>
   </properties>
 	<dependencies>
 		<dependency>
@@ -44,6 +50,15 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webflux</artifactId>
 		</dependency>
+
+    <dependency>
+      <groupId>io.github.resilience4j</groupId>
+      <artifactId>resilience4j-spring-boot2</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.resilience4j</groupId>
+      <artifactId>resilience4j-reactor</artifactId>
+    </dependency>
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
@@ -107,6 +122,24 @@
       <artifactId>jackson-databind-nullable</artifactId>
       <version>0.2.6</version>
     </dependency>
+
+
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-bootstrap</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-config</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+    </dependency>
 	</dependencies>
 	<dependencyManagement>
 		<dependencies>
@@ -117,6 +150,13 @@
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
+      <dependency>
+        <groupId>io.github.resilience4j</groupId>
+        <artifactId>resilience4j-bom</artifactId>
+        <version>${resilience4j.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
 		</dependencies>
 	</dependencyManagement>
 

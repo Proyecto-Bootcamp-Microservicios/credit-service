@@ -1,6 +1,6 @@
 package com.bootcamp.ntt.credit_service.client;
 
-import com.bootcamp.ntt.credit_service.client.dto.CustomerTypeResponse;
+import com.bootcamp.ntt.credit_service.client.dto.card.CustomerEligibilityResponse;
 import com.bootcamp.ntt.credit_service.exception.CustomerNotFoundException;
 import com.bootcamp.ntt.credit_service.exception.CustomerServiceException;
 import lombok.RequiredArgsConstructor;
@@ -14,19 +14,19 @@ import reactor.core.publisher.Mono;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class CustomerClient {
+public class CardServiceClient {
 
   private final WebClient webClient;
 
-  @Value("${services.customer.base-url}")
-  private String customerServiceUrl;
+  @Value("${services.card.service-name:card-service}")
+  private String cardServiceUrl;
 
-  public Mono<CustomerTypeResponse> getCustomerType(String customerId) {
-    log.debug("Fetching customer type for ID: {}", customerId);
+  public Mono<CustomerEligibilityResponse> getCustomerProductEligibility(String customerId) {
+    log.debug("Fetching customer with ID: {}", customerId);
 
     return webClient
       .get()
-      .uri(customerServiceUrl + "/customers/{id}", customerId)
+      .uri(cardServiceUrl + "/api/v1/credit-cards/customers/{id}/product-eligibility", customerId)
       .retrieve()
       .onStatus(HttpStatus::is4xxClientError,
         response -> {
@@ -35,13 +35,13 @@ public class CustomerClient {
         })
       .onStatus(HttpStatus::is5xxServerError,
         response -> {
-          log.error("Customer service error for customer: {}", customerId);
-          return Mono.error(new CustomerServiceException("Error communicating with customer service"));
+          log.error("Card service error for customer: {}", customerId);
+          return Mono.error(new CustomerServiceException("Error communicating with card service"));
         })
-      .bodyToMono(CustomerTypeResponse.class)
-      .doOnSuccess(response -> log.debug("Customer type retrieved: {} for ID: {}",
-        response.getCustomerType(), customerId))
-      .doOnError(error -> log.error("Error fetching customer type: {}", error.getMessage()));
+      .bodyToMono(CustomerEligibilityResponse.class)
+      .doOnSuccess(response -> log.debug("Customer eligible retrieved: {} for ID: {}",
+        response.isEligible(), customerId))
+      .doOnError(error -> log.error("Error fetching: {}", error.getMessage()));
   }
 
 }

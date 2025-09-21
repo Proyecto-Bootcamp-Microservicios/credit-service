@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.ServerWebInputException;
 import reactor.core.publisher.Mono;
 
@@ -90,6 +91,18 @@ public class GlobalExceptionHandler {
     errorResponse.setTimestamp(OffsetDateTime.now());
 
     return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse));
+  }
+
+  @ExceptionHandler(AccessDeniedException.class)
+  public Mono<ResponseEntity<ErrorResponse>> handleAccessDeniedException(AccessDeniedException ex, ServerWebExchange exchange) {
+    log.warn("Access denied: {} - Path: {}", ex.getMessage(), exchange.getRequest().getPath().value());
+
+    ErrorResponse errorResponse = new ErrorResponse();
+    errorResponse.setCode("ACCESS_DENIED");
+    errorResponse.setMessage(ex.getMessage());
+    errorResponse.setTimestamp(OffsetDateTime.now());
+
+    return Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse));
   }
 
   @ExceptionHandler(RuntimeException.class)

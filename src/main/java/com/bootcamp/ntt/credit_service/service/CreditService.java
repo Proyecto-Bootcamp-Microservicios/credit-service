@@ -6,17 +6,18 @@ import reactor.core.publisher.Mono;
 
 public interface CreditService {
 
-  Flux<CreditResponse> getAllCredits();
 
   Flux<CreditResponse> getCreditsByActive(Boolean isActive);
 
-  //Flux<CreditResponse> getCreditsByCustomer(String customerId);
-
   Mono<CreditResponse> getCreditById(String id);
+
+  Mono<CreditResponse> getCreditByNumber(String cardNumber);
 
   Flux<CreditResponse> getCreditsByActiveAndCustomer(Boolean isActive, String customerId);
 
   Mono<CreditResponse> createCredit(CreditCreateRequest creditRequest);
+
+  Mono<ProductEligibilityResponse> checkCustomerEligibility(String customerId);
 
   Mono<CreditResponse> updateCredit(String id, CreditUpdateRequest creditRequest);
 
@@ -31,8 +32,6 @@ public interface CreditService {
   Mono<PaymentProcessResponse> processPayment(String creditNumber, PaymentProcessRequest paymentRequest);
 
   Mono<CreditBalanceResponse> getCreditBalance(String cardNumber);
-
-  //Flux<CreditResponse> getActiveCredits(Boolean isActive);
 
 
 }
