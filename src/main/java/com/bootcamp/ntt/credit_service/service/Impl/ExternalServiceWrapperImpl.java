@@ -13,6 +13,7 @@ import io.github.resilience4j.timelimiter.TimeLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 @Slf4j
@@ -46,10 +47,10 @@ public class ExternalServiceWrapperImpl implements ExternalServiceWrapper {
    * Llama al card-service para verificar elegibilidad con circuit breaker y timeout
    */
   @Override
-  public Mono<CustomerEligibilityResponse> getCustomerEligibilityWithCircuitBreaker(String customerId) {
+  public Mono<CustomerEligibilityResponse> getCustomerEligibilityWithCircuitBreaker(String customerId, ServerWebExchange exchange) {
     log.debug("Calling card service for customer eligibility: {}", customerId);
 
-    return cardServiceClient.getCustomerProductEligibility(customerId)
+    return cardServiceClient.getCustomerProductEligibility(customerId, exchange)
       .transformDeferred(CircuitBreakerOperator.of(cardServiceCircuitBreaker))
       .transformDeferred(TimeLimiterOperator.of(cardServiceTimeLimiter))
       .doOnSuccess(response -> log.debug("Card service eligibility response for customer {}: eligible={}",

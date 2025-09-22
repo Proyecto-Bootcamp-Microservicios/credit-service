@@ -53,7 +53,7 @@ public class CreditsApiDelegateImpl implements CreditsApiDelegate {
           auth.isAdmin()
         );
 
-        return creditService.createCredit(securedRequest);
+        return creditService.createCredit(securedRequest, exchange);
       })
       .map(response -> {
         log.info("Credit created successfully with ID: {} - Monthly payment: {}",

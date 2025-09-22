@@ -1,6 +1,7 @@
 package com.bootcamp.ntt.credit_service.client;
 
 import com.bootcamp.ntt.credit_service.client.dto.card.CustomerEligibilityResponse;
+import com.bootcamp.ntt.credit_service.exception.CardServiceException;
 import com.bootcamp.ntt.credit_service.exception.CustomerNotFoundException;
 import com.bootcamp.ntt.credit_service.exception.CustomerServiceException;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 @Component
@@ -21,22 +23,30 @@ public class CardServiceClient {
   @Value("${services.card.service-name:card-service}")
   private String cardServiceUrl;
 
-  public Mono<CustomerEligibilityResponse> getCustomerProductEligibility(String customerId) {
-    log.debug("Fetching customer with ID: {}", customerId);
+  public Mono<CustomerEligibilityResponse> getCustomerProductEligibility(
+    String customerId,
+    ServerWebExchange exchange) {
+
+    String customerIdHeader = exchange.getRequest().getHeaders().getFirst("X-Customer-Id");
+    String userRole = exchange.getRequest().getHeaders().getFirst("X-User-Role");
+    String userId = exchange.getRequest().getHeaders().getFirst("X-User-Id");
 
     return webClient
       .get()
-      .uri(cardServiceUrl + "/api/v1/credit-cards/customers/{id}/product-eligibility", customerId)
+      .uri( cardServiceUrl + "/api/v1/credit-cards/customers/{id}/product-eligibility", customerId)
+      .header("X-Customer-Id", customerIdHeader)
+      .header("X-User-Role", userRole)
+      .header("X-User-Id", userId)
       .retrieve()
       .onStatus(HttpStatus::is4xxClientError,
         response -> {
-          log.warn("Customer not found: {}", customerId);
+          log.warn("Customer not found: {}", customerId );
           return Mono.error(new CustomerNotFoundException("Customer not found: " + customerId));
         })
       .onStatus(HttpStatus::is5xxServerError,
         response -> {
           log.error("Card service error for customer: {}", customerId);
-          return Mono.error(new CustomerServiceException("Error communicating with card service"));
+          return Mono.error(new CardServiceException("Error communicating with card service"));
         })
       .bodyToMono(CustomerEligibilityResponse.class)
       .doOnSuccess(response -> log.debug("Customer eligible retrieved: {} for ID: {}",

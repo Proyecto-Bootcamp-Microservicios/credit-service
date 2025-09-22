@@ -9,15 +9,23 @@ import com.bootcamp.ntt.credit_service.model.*;
 import com.bootcamp.ntt.credit_service.repository.CreditRepository;
 import com.bootcamp.ntt.credit_service.service.CreditService;
 import com.bootcamp.ntt.credit_service.service.ExternalServiceWrapper;
+import com.bootcamp.ntt.credit_service.utils.CreditUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.OffsetDateTime;
+
+import static com.bootcamp.ntt.credit_service.utils.CacheKeys.*;
 
 
 @Slf4j
@@ -29,61 +37,75 @@ public class CreditServiceImpl implements CreditService {
   private final CreditMapper creditMapper;
   private final CustomerServiceClient customerServiceClient;
   private final ExternalServiceWrapper externalServiceWrapper;
-  private static final SecureRandom random = new SecureRandom();
+  private final ReactiveRedisTemplate<String, Object> redisTemplate;
+  private final CreditUtils creditUtils;
 
   @Override
   public Mono<CreditResponse> getCreditById(String id) {
+    String cacheKey = "credit:master:id:" + id;
     log.debug("Getting credit by ID: {}", id);
-    return creditRepository.findById(id)
-      .doOnNext(this::updateCreditStatusIfNeeded)
-      .map(creditMapper::toResponse)
-      .doOnSuccess(credit -> {
-        if (credit != null) {
-          log.debug("Credit found with ID: {}", id);
-        } else {
-          log.debug("Credit not found with ID: {}", id);
-        }
-      });
+
+    return getCachedValue(cacheKey, CreditResponse.class)
+      .switchIfEmpty(
+        creditRepository.findById(id)
+          .doOnNext(this::updateCreditStatusIfNeeded)
+          .map(creditMapper::toResponse)
+          .flatMap(response ->
+            setCachedValue(cacheKey, response, MASTER_DATA_TTL)
+              .thenReturn(response)
+          )
+          .doOnSuccess(credit -> {
+            if (credit != null) {
+              log.debug("Credit found and cached: {}", id);
+            } else {
+              log.debug("Credit not found: {}", id);
+            }
+          })
+      );
   }
 
   @Override
   public Mono<CreditResponse> getCreditByNumber(String cardNumber) {
+    String cacheKey = "credit:master:number:" + cardNumber;
     log.debug("Getting credit by number: {}", cardNumber);
-    return creditRepository.findByCreditNumber(cardNumber)
-      .doOnNext(this::updateCreditStatusIfNeeded)
-      .map(creditMapper::toResponse)
-      .doOnSuccess(credit -> {
-        if (credit != null) {
-          log.debug("Credit found with number: {}", cardNumber);
-        } else {
-          log.debug("Credit not found with number: {}", cardNumber);
-        }
-      });
+
+    return getCachedValue(cacheKey, CreditResponse.class)
+      .switchIfEmpty(
+        creditRepository.findByCreditNumber(cardNumber)
+          .doOnNext(this::updateCreditStatusIfNeeded)
+          .map(creditMapper::toResponse)
+          .flatMap(response ->
+            setCachedValue(cacheKey, response, MASTER_DATA_TTL)
+              .thenReturn(response)
+          )
+          .doOnSuccess(credit -> {
+            if (credit != null) {
+              log.debug("Credit found and cached: {}", cardNumber);
+            } else {
+              log.debug("Credit not found: {}", cardNumber);
+            }
+          })
+      );
   }
 
   @Override
-  public Mono<CreditResponse> createCredit(CreditCreateRequest creditRequest) {
-    log.debug("Creating credit for customer: {} with amount: {}",
-      creditRequest.getCustomerId(), creditRequest.getOriginalAmount());
-
+  public Mono<CreditResponse> createCredit(CreditCreateRequest creditRequest, ServerWebExchange exchange) {
     return externalServiceWrapper.getCustomerTypeWithCircuitBreaker(creditRequest.getCustomerId())
       .flatMap(customerType -> {
         log.debug("Customer type validated: {} for customer: {}",
           customerType.getCustomerType(), creditRequest.getCustomerId());
 
         return validateCreditCreation(creditRequest.getCustomerId(), customerType.getCustomerType())
-          .then(externalServiceWrapper.getCustomerEligibilityWithCircuitBreaker(creditRequest.getCustomerId()))
+          .then(externalServiceWrapper.getCustomerEligibilityWithCircuitBreaker(creditRequest.getCustomerId(), exchange))
           .flatMap(eligibilityResponse -> {
             if (!eligibilityResponse.isEligible()) {
               log.warn("Customer {} not eligible for credit due to overdue debt.",
                 creditRequest.getCustomerId());
-
               return Mono.error(new BusinessRuleException(
                 "CUSTOMER_HAS_OVERDUE_DEBT",
                 "Customer cannot acquire new products due to overdue debt"
               ));
             }
-
             log.debug("Customer {} is eligible for new credit products", creditRequest.getCustomerId());
             return Mono.just(customerType.getCustomerType());
           })
@@ -98,10 +120,11 @@ public class CreditServiceImpl implements CreditService {
           .flatMap(creditRepository::save)
           .map(creditMapper::toResponse);
       })
-      .doOnSuccess(response -> log.info("Credit created successfully - ID: {}, Customer: {}, Monthly payment: {}, Total installments: {}",
-        response.getId(), response.getCustomerId(), response.getMonthlyPayment(), response.getTotalInstallments()))
-      .doOnError(error -> log.error("Error creating credit for customer {}: {}",
-        creditRequest.getCustomerId(), error.getMessage()));
+      .doOnSuccess(response -> {
+        log.info("Credit created successfully - ID: {}, Customer: {}, Monthly payment: {}, Total installments: {}",
+          response.getId(), response.getCustomerId(), response.getMonthlyPayment(), response.getTotalInstallments());
+        invalidateCustomerCaches(response.getCustomerId());
+      });
   }
 
   @Override
@@ -113,7 +136,10 @@ public class CreditServiceImpl implements CreditService {
       .map(existing -> creditMapper.updateEntity(existing, creditRequest))
       .doOnNext(this::updateCreditStatusIfNeeded)
       .flatMap(creditRepository::save)
-      .map(creditMapper::toResponse)
+      .map(credit -> {
+        invalidateCreditCaches(credit.getId(), credit.getCreditNumber(), credit.getCustomerId());
+        return creditMapper.toResponse(credit);
+      })
       .doOnSuccess(response -> log.debug("Credit updated with ID: {}", response.getId()))
       .doOnError(error -> log.error("Error updating credit {}: {}", id, error.getMessage()));
   }
@@ -122,8 +148,17 @@ public class CreditServiceImpl implements CreditService {
   public Mono<Void> deleteCredit(String id) {
     return creditRepository.findById(id)
       .switchIfEmpty(Mono.error(new RuntimeException("Credit not found")))
-      .flatMap(creditRepository::delete)
-      .doOnSuccess(unused -> log.debug("Credit deleted"))
+      .flatMap(credit -> {
+        String customerId = credit.getCustomerId();
+        String creditNumber = credit.getCreditNumber();
+
+        return creditRepository.delete(credit)
+          .doOnSuccess(unused -> {
+            log.debug("Credit deleted");
+            // ✅ INVALIDACIÓN MANUAL
+            invalidateCreditCaches(id, creditNumber, customerId);
+          });
+      })
       .doOnError(error -> log.error("Error deleting credit {}: {}", id, error.getMessage()));
   }
 
@@ -132,7 +167,7 @@ public class CreditServiceImpl implements CreditService {
     return creditRepository.findByIsActive(isActive)
       .doOnNext(this::updateCreditStatusIfNeeded)
       .map(creditMapper::toResponse)
-      .doOnComplete(() -> log.debug("Active credits retrieved"));
+      .doOnComplete(() -> log.debug("Active credits retrieved from DB"));
   }
 
   @Override
@@ -140,7 +175,7 @@ public class CreditServiceImpl implements CreditService {
     return creditRepository.findByIsActiveAndCustomerId(isActive, customerId)
       .doOnNext(this::updateCreditStatusIfNeeded)
       .map(creditMapper::toResponse)
-      .doOnComplete(() -> log.debug("Credits active by customer retrieved"));
+      .doOnComplete(() -> log.debug("Credits active by customer retrieved from DB"));
   }
 
   @Override
@@ -171,7 +206,7 @@ public class CreditServiceImpl implements CreditService {
 
   @Override
   public Mono<String> generateUniqueCreditNumber() {
-    String candidate = generateRandomCreditNumber();
+    String candidate = creditUtils.generateRandomCreditNumber();
     return creditRepository.findByCreditNumber(candidate)
       .flatMap(existing -> generateUniqueCreditNumber()) // si existe, intenta de nuevo
       .switchIfEmpty(Mono.just(candidate)); // si no existe, úsalo
@@ -228,13 +263,59 @@ public class CreditServiceImpl implements CreditService {
       .map(this::mapCreditToOverdueProduct);
   }
 
-  private String generateRandomCreditNumber() {
-    StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < 4; i++) {
-      sb.append(random.nextInt(10));
-    }
-    return "CR-" + sb;
+  private <T> Mono<T> getCachedValue(String key, Class<T> valueType) {
+    return redisTemplate.opsForValue()
+      .get(key)
+      .cast(valueType)
+      .doOnNext(cached -> log.debug("REDIS CACHE HIT: {}", key))
+      .onErrorResume(error -> {
+        log.warn("Redis read error for key {}: {}", key, error.getMessage());
+        return Mono.empty(); // cache miss
+      });
   }
+
+  private Mono<Boolean> setCachedValue(String key, Object value, Duration ttl) {
+    return redisTemplate.opsForValue()
+      .set(key, value, ttl)
+      .doOnSuccess(success -> {
+        if (success) {
+          log.debug("REDIS CACHE SET: {} (TTL: {})", key, ttl);
+        } else {
+          log.warn("Redis cache SET failed for key: {}", key);
+        }
+      })
+      .onErrorResume(error -> {
+        log.error("Redis write error for key {}: {}", key, error.getMessage());
+        return Mono.just(false);
+      });
+  }
+
+  private Mono<Boolean> setCachedValue(String key, Object value) {
+    return setCachedValue(key, value, MASTER_DATA_TTL);
+  }
+
+  // helpers para invalidar cache
+  private void invalidateCreditCaches(String creditId, String creditNumber, String customerId) {
+    Flux.just(
+        "credit:master:id:" + creditId,
+        "credit:master:number:" + creditNumber,
+        "balance:master:" + creditNumber,
+        "eligibility:master:" + customerId
+      )
+      .flatMap(redisTemplate::delete)
+      .doOnNext(deleted -> log.debug("Cache invalidated: {}", deleted))
+      .subscribe();
+  }
+
+  private void invalidateCustomerCaches(String customerId) {
+    Flux.just(
+        "eligibility:master:" + customerId
+      )
+      .flatMap(redisTemplate::delete)
+      .doOnNext(deleted -> log.debug("Customer cache invalidated: {}", deleted))
+      .subscribe();
+  }
+
 
   private Mono<Void> validateCreditCreation(String customerId, String customerType) {
     // Validar reglas de negocio según el tipo

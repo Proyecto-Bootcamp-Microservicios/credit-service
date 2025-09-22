@@ -1,6 +1,7 @@
 package com.bootcamp.ntt.credit_service.service;
 
 import com.bootcamp.ntt.credit_service.model.*;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -15,7 +16,7 @@ public interface CreditService {
 
   Flux<CreditResponse> getCreditsByActiveAndCustomer(Boolean isActive, String customerId);
 
-  Mono<CreditResponse> createCredit(CreditCreateRequest creditRequest);
+  Mono<CreditResponse> createCredit(CreditCreateRequest creditRequest, ServerWebExchange exchange);
 
   Mono<ProductEligibilityResponse> checkCustomerEligibility(String customerId);
 
